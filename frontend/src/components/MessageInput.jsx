@@ -1,3 +1,4 @@
+// MessageInput.jsx
 import { useState, useRef, useEffect } from "react";
 
 export default function MessageInput({ onSend, isLoading, disabled }) {
@@ -17,6 +18,11 @@ export default function MessageInput({ onSend, isLoading, disabled }) {
     if (!trimmed || isLoading || disabled) return;
     onSend(trimmed);
     setText("");
+    
+    // Reset textarea height after clearing
+    if (textareaRef.current) {
+      textareaRef.current.style.height = "auto";
+    }
   };
 
   const handleKeyDown = (e) => {
@@ -29,34 +35,36 @@ export default function MessageInput({ onSend, isLoading, disabled }) {
 
   return (
     <div className="input-bar">
-      <div className="input-wrapper">
+      <div className="input-container">
         <textarea
           ref={textareaRef}
-          className="input-textarea"
+          className="input-field"
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Message NeuralChat… (Enter to send, Shift+Enter for new line)"
+          placeholder="Message ChatGPT..."
           rows={1}
           disabled={isLoading || disabled}
         />
         <button
-          className={`input-send-btn ${isLoading ? "loading" : ""}`}
+          className="send-button"
           onClick={handleSubmit}
           disabled={!text.trim() || isLoading || disabled}
           title="Send message"
         >
           {isLoading ? (
-            <span className="spinner" />
+            <i className="bi bi-arrow-repeat spinner-icon"></i>
           ) : (
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-              <line x1="22" y1="2" x2="11" y2="13" />
-              <polygon points="22 2 15 22 11 13 2 9 22 2" />
-            </svg>
+            <i className="bi bi-send-fill"></i>
           )}
         </button>
       </div>
-      <p className="input-hint">Enter ↵ to send · Shift+Enter for new line</p>
+      <div className="input-hint">
+        <i className="bi bi-arrow-return-left" style={{ fontSize: "12px", marginRight: "4px" }}></i>
+        Enter to send · 
+        <i className="bi bi-shift-fill" style={{ fontSize: "12px", marginLeft: "4px", marginRight: "4px" }}></i>
+        + Enter for new line
+      </div>
     </div>
   );
 }

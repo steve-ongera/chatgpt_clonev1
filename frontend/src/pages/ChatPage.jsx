@@ -1,3 +1,4 @@
+// ChatPage.jsx
 import { useState, useEffect } from "react";
 import ChatWindow from "../components/ChatWindow.jsx";
 import MessageInput from "../components/MessageInput.jsx";
@@ -74,20 +75,40 @@ export default function ChatPage({ conversationId, onConversationCreated }) {
   };
 
   return (
-    <div className="chat-page">
+    <div className="chat-page" style={{ height: "100%", display: "flex", flexDirection: "column" }}>
       <header className="chat-header">
-        <h1 className="chat-header-title">
-          {activeConversationId ? "Chat" : "New Chat"}
-        </h1>
+        <div className="chat-header-title">
+          <i className="bi bi-chat-dots" style={{ marginRight: "var(--spacing-sm)" }}></i>
+          {activeConversationId ? (
+            <span>Conversation</span>
+          ) : (
+            <span>New Chat</span>
+          )}
+        </div>
       </header>
 
-      <div className="chat-body">
+      <div className="chat-body" style={{ flex: 1, overflowY: "auto" }}>
         <ChatWindow messages={messages} isLoading={isLoading} />
       </div>
 
       {error && (
-        <div className="error-banner">
-          ⚠️ {error}
+        <div className="error-banner fade-in">
+          <i className="bi bi-exclamation-triangle-fill" style={{ marginRight: "var(--spacing-sm)" }}></i>
+          {error}
+          <button 
+            onClick={() => setError(null)}
+            style={{ 
+              float: "right", 
+              background: "none", 
+              border: "none", 
+              cursor: "pointer",
+              color: "inherit",
+              padding: 0,
+              marginLeft: "var(--spacing-md)"
+            }}
+          >
+            <i className="bi bi-x-lg"></i>
+          </button>
         </div>
       )}
 
