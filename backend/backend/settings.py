@@ -93,6 +93,24 @@ REST_FRAMEWORK = {
     ],
 }
 
-# OpenAI
+# ── AI Provider switch ──────────────────────────────────────
+# Development  → AI_PROVIDER=local
+# Production   → AI_PROVIDER=openai
+AI_PROVIDER = os.getenv("AI_PROVIDER", "openai")   # "openai" | "local"
+
+# ── OpenAI (used when AI_PROVIDER=openai) ───────────────────
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
-OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-3.5-turbo")
+OPENAI_MODEL   = os.getenv("OPENAI_MODEL", "gpt-3.5-turbo")
+
+# ── Local / trained model (used when AI_PROVIDER=local) ─────
+# Which local backend to use: huggingface | llamacpp | ollama
+LOCAL_AI_BACKEND = os.getenv("LOCAL_AI_BACKEND", "huggingface")
+
+# Path to your model weights directory or .gguf file
+# For HuggingFace: path to fine-tuned model dir  e.g. ./models/my-finetuned
+# For llama-cpp:   path to .gguf file             e.g. ./models/mistral.gguf
+# For Ollama:      the model name                 e.g. mistral
+LOCAL_MODEL_PATH = os.getenv("LOCAL_MODEL_PATH", "")
+
+# Ollama server URL (only needed when LOCAL_AI_BACKEND=ollama)
+OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
