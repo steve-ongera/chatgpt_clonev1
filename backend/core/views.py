@@ -1,5 +1,3 @@
-import openai
-from django.conf import settings
 from rest_framework import status
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -11,18 +9,14 @@ from .serializers import (
     ConversationListSerializer,
     ConversationDetailSerializer,
 )
-
-# Configure the OpenAI client once at module level
-client = openai.OpenAI(api_key=settings.OPENAI_API_KEY)
+from .ai_service import get_ai_reply, AIServiceError
 
 
 class ChatView(APIView):
     """
     POST /api/chat/
     Accepts a user message and an optional conversation_id.
-    - If conversation_id is provided, continues that conversation.
-    - If not, starts a new conversation.
-    Returns the AI reply and the conversation_id.
+    Routes to local model or OpenAI based on AI_PROVIDER in .env.
     """
 
     def post(self, request):
@@ -30,7 +24,7 @@ class ChatView(APIView):
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-        user_message = serializer.validated_data["message"]
+        user_message    = serializer.validated_data["message"]
         conversation_id = serializer.validated_data.get("conversation_id")
 
         # Get or create conversation
@@ -45,95 +39,80 @@ class ChatView(APIView):
         else:
             conversation = Conversation.objects.create()
 
-        # Save the user's message
+        # Persist the user message
         Message.objects.create(
             conversation=conversation,
             role="user",
             content=user_message,
         )
 
-        # Build message history for OpenAI (last 20 messages for context window)
-        history = conversation.messages.order_by("created_at").values("role", "content")
+        # Build message history (last 20 exchanges for context window)
+        history = (
+            conversation.messages
+            .order_by("created_at")
+            .values("role", "content")
+        )
         openai_messages = [{"role": m["role"], "content": m["content"]} for m in history]
 
-        # Prepend a system prompt
-        openai_messages.insert(
-            0,
-            {
-                "role": "system",
-                "content": (
-                    "You are a helpful, friendly, and concise AI assistant. "
-                    "Answer clearly and accurately. If you don't know something, say so."
-                ),
-            },
-        )
+        # Prepend system prompt
+        openai_messages.insert(0, {
+            "role": "system",
+            "content": (
+                "You are a helpful, friendly, and concise AI assistant. "
+                "Answer clearly and accurately. If you don't know something, say so."
+            ),
+        })
 
-        # Call OpenAI API
+        # Call whichever provider is configured
         try:
-            response = client.chat.completions.create(
-                model=settings.OPENAI_MODEL,
-                messages=openai_messages,
-                max_tokens=1024,
-                temperature=0.7,
-            )
-            ai_reply = response.choices[0].message.content.strip()
-        except openai.AuthenticationError:
+            ai_reply = get_ai_reply(openai_messages)
+        except AIServiceError as e:
             return Response(
-                {"error": "Invalid OpenAI API key. Check your .env file."},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            )
-        except openai.RateLimitError:
-            return Response(
-                {"error": "OpenAI rate limit exceeded. Try again shortly."},
-                status=status.HTTP_429_TOO_MANY_REQUESTS,
-            )
-        except openai.OpenAIError as e:
-            return Response(
-                {"error": f"OpenAI error: {str(e)}"},
+                {"error": str(e)},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
-        # Save the assistant's reply
+        # Persist AI reply
         assistant_message = Message.objects.create(
             conversation=conversation,
             role="assistant",
             content=ai_reply,
         )
 
-        # Auto-title the conversation after first exchange
+        # Auto-title after first exchange
         if conversation.messages.count() == 2:
             conversation.generate_title()
 
-        response_data = ChatResponseSerializer({
-            "reply": ai_reply,
-            "conversation_id": conversation.id,
-            "message_id": assistant_message.id,
-        }).data
-
-        return Response(response_data, status=status.HTTP_200_OK)
+        return Response(
+            ChatResponseSerializer({
+                "reply":           ai_reply,
+                "conversation_id": conversation.id,
+                "message_id":      assistant_message.id,
+            }).data,
+            status=status.HTTP_200_OK,
+        )
 
 
 class ConversationListView(APIView):
     """
-    GET /api/conversations/
-    Returns all conversations ordered by most recently updated.
+    GET    /api/conversations/  — list all conversations
+    DELETE /api/conversations/  — wipe all conversations
     """
 
     def get(self, request):
         conversations = Conversation.objects.all()
-        serializer = ConversationListSerializer(conversations, many=True)
+        serializer    = ConversationListSerializer(conversations, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
     def delete(self, request):
-        """DELETE /api/conversations/ — wipes all conversations."""
         Conversation.objects.all().delete()
         return Response({"message": "All conversations deleted."}, status=status.HTTP_200_OK)
 
 
 class ConversationDetailView(APIView):
     """
-    GET  /api/conversations/<uuid>/  — fetch full conversation with messages
-    DELETE /api/conversations/<uuid>/ — delete a conversation
+    GET    /api/conversations/<uuid>/  — full conversation + messages
+    DELETE /api/conversations/<uuid>/  — delete one conversation
     """
 
     def _get_conversation(self, pk):
@@ -146,8 +125,7 @@ class ConversationDetailView(APIView):
         conversation = self._get_conversation(pk)
         if not conversation:
             return Response({"error": "Not found."}, status=status.HTTP_404_NOT_FOUND)
-        serializer = ConversationDetailSerializer(conversation)
-        return Response(serializer.data)
+        return Response(ConversationDetailSerializer(conversation).data)
 
     def delete(self, request, pk):
         conversation = self._get_conversation(pk)
